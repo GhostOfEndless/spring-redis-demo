@@ -1,0 +1,4 @@
+rootProject.name = 'spring-redis-demo'
+include 'consumer'
+include 'producer'
+

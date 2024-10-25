@@ -1,11 +1,14 @@
 package com.example.config;
 
 import com.example.entity.ChatConfig;
+import io.lettuce.core.ReadFrom;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.RedisStaticMasterReplicaConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
@@ -16,22 +19,28 @@ import java.nio.charset.StandardCharsets;
 
 @Slf4j
 @Configuration
+@RequiredArgsConstructor
 public class RedisConfig {
 
-    @Value("${spring.data.redis.host}")
-    private String host;
-
-    @Value("${spring.data.redis.port}")
-    private int port;
+    private final RedisProperties properties;
 
     @Bean(name = "redisConnectionFactoryConfigDB")
     public LettuceConnectionFactory lettuceConnectionFactoryConfigDB() {
-        return createLettuceConnectionFactory(1);
+        return createLettuceConnectionFactoryDB(1);
     }
 
     @Bean(name = "redisConnectionFactoryUserDB")
     public LettuceConnectionFactory lettuceConnectionFactoryUserDB() {
-        return createLettuceConnectionFactory(2);
+        return createLettuceConnectionFactoryDB(2);
+    }
+
+    @Bean(name = "redisConnectionFactoryUpdateTopic")
+    public LettuceConnectionFactory lettuceConnectionFactoryUpdateTopic() {
+        log.info("PUB/SUB: Redis host {} port {}", properties.master().host(), properties.master().port());
+        var redisStandaloneConfig = new RedisStandaloneConfiguration(properties.master().host(),
+                properties.master().port());
+
+       return new LettuceConnectionFactory(redisStandaloneConfig);
     }
 
     @Bean
@@ -46,15 +55,23 @@ public class RedisConfig {
     @Bean
     public RedisMessageListenerContainer redisMessageListenerContainer() {
         var container = new RedisMessageListenerContainer();
-        container.setConnectionFactory(lettuceConnectionFactoryConfigDB());
+        container.setConnectionFactory(lettuceConnectionFactoryUpdateTopic());
         return container;
     }
 
-    private LettuceConnectionFactory createLettuceConnectionFactory(int database) {
-        log.info("Redis host {} port {} db {}", host, port, database);
-        var redisStandaloneConfig = new RedisStandaloneConfiguration(host, port);
-        redisStandaloneConfig.setDatabase(database);
+    private LettuceConnectionFactory createLettuceConnectionFactoryDB(int database) {
+        log.info("DB: Redis master {} slaves {} db {}", properties.master(), properties.slaves(), database);
 
-        return new LettuceConnectionFactory(redisStandaloneConfig);
+        var clientConfig = LettuceClientConfiguration.builder()
+                .readFrom(ReadFrom.REPLICA_PREFERRED)
+                .build();
+
+        var staticMasterReplicaConfiguration = new RedisStaticMasterReplicaConfiguration(
+                properties.master().host(), properties.master().port());
+        staticMasterReplicaConfiguration.setDatabase(database);
+        properties.slaves().forEach(slave -> staticMasterReplicaConfiguration.addNode(slave.host(), slave.port()));
+
+
+        return new LettuceConnectionFactory(staticMasterReplicaConfiguration, clientConfig);
     }
 }

@@ -14,10 +14,19 @@ services:
       - '8080:8080'
     container_name: producer
     environment:
-      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_MASTER_HOST: ${REDIS_MASTER_HOST:-redis-master}
+      REDIS_SLAVE_1_HOST: ${REDIS_SLAVE_1_HOST:-redis-slave-a}
+      REDIS_SLAVE_2_HOST: ${REDIS_SLAVE_2_HOST:-redis-slave-b}
     depends_on:
-      redis:
+      redis-master:
         condition: service_healthy
+      redis-slave-a:
+        condition: service_healthy
+      redis-slave-b:
+        condition: service_healthy
+    networks:
+      - redis
+      - app
 
   consumer:
     build:
@@ -30,7 +39,21 @@ services:
       - '8081:8081'
     container_name: consumer
     environment:
-      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_MASTER_HOST: ${REDIS_MASTER_HOST:-redis-master}
+      REDIS_SLAVE_1_HOST: ${REDIS_SLAVE_1_HOST:-redis-slave-a}
+      REDIS_SLAVE_2_HOST: ${REDIS_SLAVE_2_HOST:-redis-slave-b}
     depends_on:
-      redis:
+      redis-master:
         condition: service_healthy
+      redis-slave-a:
+        condition: service_healthy
+      redis-slave-b:
+        condition: service_healthy
+    networks:
+      - redis
+      - app
+
+networks:
+  app:
+    name: application-network
+    driver: bridge

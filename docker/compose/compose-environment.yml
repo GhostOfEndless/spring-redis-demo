@@ -1,12 +1,69 @@
 services:
-  redis:
-    image: redis:7.4.1
-    container_name: ${REDIS_HOST:-redis}
+  redis-master:
+    image: &redis-image redis:7.4.1
+    container_name: ${REDIS_MASTER_HOST:-redis-master}
+    restart: unless-stopped
+    volumes:
+      - redis_master:/data
     env_file:
       - .env
     ports:
       - '6379:6379'
     healthcheck:
-      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 3s
       timeout: 5s
+    networks:
+      - redis
+
+  redis-slave-a:
+    image: *redis-image
+    container_name: ${REDIS_SLAVE_1_HOST:-redis-slave-a}
+    restart: unless-stopped
+    volumes:
+      - redis_slave_a:/data
+    env_file:
+      - .env
+    ports:
+      - '7000:7000'
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-p", "7000", "ping" ]
+      interval: 3s
+      timeout: 5s
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    command: redis-server --port 7000 --slaveof ${REDIS_MASTER_HOST:-redis-master} 6379
+    networks:
+      - redis
+
+  redis-slave-b:
+    image: *redis-image
+    container_name: ${REDIS_SLAVE_2_HOST:-redis-slave-b}
+    restart: unless-stopped
+    volumes:
+      - redis_slave_b:/data
+    env_file:
+      - .env
+    ports:
+      - '7001:7001'
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-p", "7001", "ping" ]
+      interval: 3s
+      timeout: 5s
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    command: redis-server --port 7001 --slaveof ${REDIS_MASTER_HOST:-redis-master} 6379
+    networks:
+      - redis
+
+volumes:
+  redis_master:
+  redis_slave_a:
+  redis_slave_b:
+
+networks:
+  redis:
+    name: redis-network
+    driver: bridge

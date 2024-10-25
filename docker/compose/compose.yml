@@ -1,0 +1,36 @@
+# noinspection ComposeUnknownKeys
+include:
+  - compose-environment.yml
+
+services:
+  producer:
+    build:
+      context: ../../
+      dockerfile: docker/producer.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - '8080:8080'
+    container_name: producer
+    environment:
+      REDIS_HOST: ${REDIS_HOST:-redis}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  consumer:
+    build:
+      context: ../../
+      dockerfile: docker/consumer.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - '8081:8081'
+    container_name: consumer
+    environment:
+      REDIS_HOST: ${REDIS_HOST:-redis}
+    depends_on:
+      redis:
+        condition: service_healthy
